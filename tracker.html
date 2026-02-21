@@ -427,9 +427,9 @@
       speed: pos.coords.speed ? Math.round(pos.coords.speed * 3.6) : 0,
       accuracy: Math.round(pos.coords.accuracy),
       heading: pos.coords.heading || 0,
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      active: true
     };
-
     try {
       const res = await fetch(`${FIREBASE_URL}/sessions/${SESSION_ID}/location.json`, {
         method: 'PUT',
@@ -437,10 +437,23 @@
         body: JSON.stringify(data)
       });
       if (!res.ok) throw new Error('HTTP ' + res.status);
-      addLog(`📡 Trimis: ${data.lat.toFixed(5)}, ${data.lng.toFixed(5)} — ${data.speed} km/h`, 'ok');
+      addLog(`Trimis: ${data.lat.toFixed(5)}, ${data.lng.toFixed(5)} - ${data.speed} km/h`, 'ok');
       triggerPulse();
     } catch (e) {
-      addLog('❌ Eroare trimitere: ' + e.message, 'err');
+      addLog('Eroare trimitere: ' + e.message, 'err');
+    }
+  }
+
+  async function setInactive() {
+    try {
+      await fetch(`${FIREBASE_URL}/sessions/${SESSION_ID}/location.json`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active: false, timestamp: Date.now() })
+      });
+      addLog('Sesiune marcata inactiva', 'ok');
+    } catch(e) {
+      addLog('Eroare oprire: ' + e.message, 'err');
     }
   }
 
@@ -460,7 +473,7 @@
 
   function startTracking() {
     if (!navigator.geolocation) {
-      alert('❌ GPS nu este suportat pe acest dispozitiv!');
+      alert('GPS nu este suportat pe acest dispozitiv!');
       return;
     }
     SESSION_ID = generateId();
@@ -470,44 +483,40 @@
 
     document.getElementById('trackLink').textContent = monitorUrl;
     document.getElementById('linkSection').style.display = 'block';
-
     document.getElementById('btnStart').style.display = 'none';
     document.getElementById('btnStop').style.display = 'block';
     document.getElementById('ringOuter').classList.add('spinning');
     document.getElementById('countdown').style.display = 'block';
-    setStatus('ACTIV — SE TRIMITE GPS', 'active');
+    setStatus('ACTIV - SE TRIMITE GPS', 'active');
     isTracking = true;
 
-    // Get location immediately then every 30s
-    navigator.geolocation.watchPosition(
-      pos => { updateUI(pos); },
-      err => { addLog('⚠️ GPS: ' + err.message, 'err'); setStatus('EROARE GPS', 'error'); },
-      { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 }
+    // watchPosition trimite la fiecare miscare detectata de GPS
+    watchId = navigator.geolocation.watchPosition(
+      pos => {
+        updateUI(pos);
+        sendToFirebase(pos);
+      },
+      err => { addLog('GPS: ' + err.message, 'err'); setStatus('EROARE GPS', 'error'); },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
     );
 
-    // Send immediately
-    navigator.geolocation.getCurrentPosition(pos => {
-      updateUI(pos);
-      sendToFirebase(pos);
-    }, err => addLog('GPS err: ' + err.message, 'err'), { enableHighAccuracy: true });
-
-    // Send every 30 seconds
-    countSec = 30;
+    // Backup: trimitere fortata la fiecare 5 secunde daca GPS sta pe loc
+    countSec = 5;
     sendInterval = setInterval(() => {
       if (lastPosition) sendToFirebase(lastPosition);
-    }, 30000);
+    }, 5000);
 
     countdownInterval = setInterval(() => {
       countSec--;
       document.getElementById('countSec').textContent = countSec;
-      if (countSec <= 0) countSec = 30;
+      if (countSec <= 0) countSec = 5;
     }, 1000);
 
-    addLog('🚀 Sesiune pornită: ' + SESSION_ID, 'ok');
+    addLog('Sesiune pornita: ' + SESSION_ID, 'ok');
   }
 
   async function stopTracking() {
-    if (watchId) navigator.geolocation.clearWatch(watchId);
+    if (watchId) { navigator.geolocation.clearWatch(watchId); watchId = null; }
     clearInterval(sendInterval);
     clearInterval(countdownInterval);
     document.getElementById('btnStart').style.display = 'block';
@@ -516,13 +525,8 @@
     document.getElementById('countdown').style.display = 'none';
     setStatus('OPRIT', '');
     isTracking = false;
-    addLog('⏹ Tracking oprit', '');
-    try {
-      await fetch(`${FIREBASE_URL}/sessions/${SESSION_ID}/location.json`, { method: 'DELETE' });
-      addLog('Date sterse din Firebase', 'ok');
-    } catch(e) {
-      addLog('Nu s-au putut sterge datele: ' + e.message, 'err');
-    }
+    addLog('Tracking oprit', '');
+    await setInactive();
   }
 
   function copyLink() {

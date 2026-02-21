@@ -367,7 +367,18 @@
   }
 
   function updateDisplay(data) {
-    const { lat, lng, speed, accuracy, timestamp } = data;
+    const { lat, lng, speed, accuracy, timestamp, active } = data;
+
+    // Daca active este false, tracker-ul e oprit - arata ecran de asteptare
+    if (active === false) {
+      document.getElementById('waitScreen').style.display = 'flex';
+      document.getElementById('waitMsg').textContent = 'Tracker-ul este oprit.\nAsteapta ca masina sa porneasca tracking-ul.';
+      if (marker) { marker.remove(); marker = null; }
+      if (accuracyCircle) { accuracyCircle.remove(); accuracyCircle = null; }
+      mapInitialized = false;
+      lastTimestamp = null;
+      return;
+    }
 
     // Hide wait screen
     document.getElementById('waitScreen').style.display = 'none';
