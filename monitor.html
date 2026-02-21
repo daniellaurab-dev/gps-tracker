@@ -437,9 +437,24 @@
     if (!lastTimestamp) return;
     const age = Math.round((Date.now() - lastTimestamp) / 1000);
     document.getElementById('metAge').textContent = age;
-    // Color code: green <40s, yellow <90s, red >90s
     const el = document.getElementById('metAge');
-    el.style.color = age < 40 ? 'var(--green)' : age < 90 ? '#ffaa00' : 'var(--accent2)';
+    el.style.color = age < 10 ? 'var(--green)' : age < 20 ? '#ffaa00' : 'var(--accent2)';
+
+    // Daca nu am primit date de peste 15 secunde => tracker oprit
+    if (age > 15) {
+      document.getElementById('waitScreen').style.display = 'flex';
+      document.getElementById('waitMsg').textContent = 'Semnal pierdut sau tracker oprit.\nUltima pozitie: acum ' + age + ' secunde.\nAsteapta reconectare...';
+      if (marker) { marker.remove(); marker = null; }
+      if (accuracyCircle) { accuracyCircle.remove(); accuracyCircle = null; }
+      mapInitialized = false;
+      lastTimestamp = null;
+      document.getElementById('speedBig').textContent = '0';
+      document.getElementById('metAcc').textContent = '—';
+      document.getElementById('metLat').textContent = '—';
+      document.getElementById('metLng').textContent = '—';
+      document.getElementById('metAge').textContent = '—';
+      document.getElementById('lastUpdate').textContent = '—';
+    }
   }
 
   function startPolling() {
