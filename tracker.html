@@ -506,7 +506,7 @@
     addLog('🚀 Sesiune pornită: ' + SESSION_ID, 'ok');
   }
 
-  function stopTracking() {
+  async function stopTracking() {
     if (watchId) navigator.geolocation.clearWatch(watchId);
     clearInterval(sendInterval);
     clearInterval(countdownInterval);
@@ -517,6 +517,12 @@
     setStatus('OPRIT', '');
     isTracking = false;
     addLog('⏹ Tracking oprit', '');
+    try {
+      await fetch(`${FIREBASE_URL}/sessions/${SESSION_ID}/location.json`, { method: 'DELETE' });
+      addLog('Date sterse din Firebase', 'ok');
+    } catch(e) {
+      addLog('Nu s-au putut sterge datele: ' + e.message, 'err');
+    }
   }
 
   function copyLink() {
