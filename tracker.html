@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>GPS Tracker 🚗</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --card: #111118;
+    --border: #1e1e2e;
+    --accent: #00ff88;
+    --accent2: #ff3366;
+    --text: #e0e0f0;
+    --muted: #555570;
+    --pulse: #00ff8840;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px 16px;
+    position: relative;
+    overflow-x: hidden;
+  }
+  body::before {
+    content: '';
+    position: fixed;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(ellipse at 30% 20%, #00ff8808 0%, transparent 50%),
+                radial-gradient(ellipse at 70% 80%, #ff336608 0%, transparent 50%);
+    pointer-events: none;
+    z-index: 0;
+  }
+  .content { position: relative; z-index: 1; width: 100%; max-width: 420px; }
+
+  header { text-align: center; margin-bottom: 32px; padding-top: 10px; }
+  .logo {
+    font-family: 'Syne', sans-serif;
+    font-size: 2rem;
+    font-weight: 800;
+    letter-spacing: -1px;
+    background: linear-gradient(135deg, var(--accent), #00ccff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .subtitle { color: var(--muted); font-size: 0.7rem; letter-spacing: 3px; margin-top: 4px; text-transform: uppercase; }
+
+  .status-ring {
+    width: 140px; height: 140px;
+    margin: 0 auto 28px;
+    position: relative;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .ring {
+    position: absolute;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+  }
+  .ring-outer { width: 140px; height: 140px; }
+  .ring-mid { width: 100px; height: 100px; border-color: var(--border); }
+  .ring-inner { width: 60px; height: 60px; background: var(--card); border-color: var(--border); }
+  .ring-pulse {
+    position: absolute;
+    width: 60px; height: 60px;
+    border-radius: 50%;
+    background: var(--accent);
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  .car-icon { font-size: 1.8rem; position: relative; z-index: 2; }
+
+  .status-indicator {
+    text-align: center;
+    margin-bottom: 24px;
+  }
+  .status-dot {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--muted);
+    margin-right: 8px;
+    vertical-align: middle;
+    transition: background 0.3s;
+  }
+  .status-text { font-size: 0.75rem; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); }
+
+  .status-dot.active { background: var(--accent); box-shadow: 0 0 10px var(--accent); }
+  .status-dot.error { background: var(--accent2); box-shadow: 0 0 10px var(--accent2); }
+
+  .data-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .data-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    position: relative;
+    overflow: hidden;
+  }
+  .data-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent)40, transparent);
+  }
+  .data-label { font-size: 0.6rem; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+  .data-value { font-size: 1.3rem; font-weight: 700; color: var(--accent); }
+  .data-unit { font-size: 0.65rem; color: var(--muted); }
+
+  .data-card.wide { grid-column: 1 / -1; }
+
+  .coord-value { font-size: 0.85rem; color: var(--text); word-break: break-all; }
+
+  .btn-start {
+    width: 100%;
+    padding: 18px;
+    background: linear-gradient(135deg, var(--accent), #00ccff);
+    border: none;
+    border-radius: 12px;
+    font-family: 'Syne', sans-serif;
+    font-size: 1rem;
+    font-weight: 800;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: #0a0a0f;
+    cursor: pointer;
+    margin-bottom: 12px;
+    transition: all 0.2s;
+    box-shadow: 0 0 30px #00ff8830;
+  }
+  .btn-start:active { transform: scale(0.98); }
+  .btn-start:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .btn-stop {
+    width: 100%;
+    padding: 16px;
+    background: transparent;
+    border: 1px solid var(--accent2);
+    border-radius: 12px;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.8rem;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--accent2);
+    cursor: pointer;
+    margin-bottom: 20px;
+    transition: all 0.2s;
+    display: none;
+  }
+  .btn-stop:active { transform: scale(0.98); background: #ff336610; }
+
+  .link-section {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 16px;
+    display: none;
+  }
+  .link-label { font-size: 0.6rem; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
+  .link-box {
+    background: #0a0a0f;
+    border: 1px solid #00ff8830;
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 0.65rem;
+    color: var(--accent);
+    word-break: break-all;
+    margin-bottom: 10px;
+    line-height: 1.5;
+  }
+  .btn-copy, .btn-share {
+    padding: 10px 16px;
+    border-radius: 8px;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-right: 8px;
+    margin-top: 4px;
+  }
+  .btn-copy {
+    background: transparent;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+  }
+  .btn-copy:active { background: #00ff8820; }
+  .btn-share {
+    background: #25D366;
+    border: none;
+    color: white;
+    font-weight: 700;
+  }
+  .btn-share:active { opacity: 0.8; }
+
+  .countdown {
+    text-align: center;
+    margin-top: 8px;
+    font-size: 0.7rem;
+    color: var(--muted);
+    letter-spacing: 1px;
+  }
+  .countdown span { color: var(--accent); font-weight: 700; }
+
+  .log {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px;
+    max-height: 160px;
+    overflow-y: auto;
+    font-size: 0.62rem;
+    line-height: 1.8;
+    color: var(--muted);
+    display: none;
+  }
+  .log-entry { border-bottom: 1px solid var(--border); padding: 2px 0; }
+  .log-entry.ok { color: var(--accent); }
+  .log-entry.err { color: var(--accent2); }
+
+  @keyframes pulse-ring {
+    0% { transform: scale(0.5); opacity: 0.8; }
+    100% { transform: scale(2.5); opacity: 0; }
+  }
+  @keyframes spin-ring {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+  .spinning { animation: spin-ring 3s linear infinite; border-top-color: var(--accent) !important; }
+  .pulsing { animation: pulse-ring 1.5s ease-out infinite; }
+
+  .firebase-note {
+    background: #ff336610;
+    border: 1px solid #ff336630;
+    border-radius: 8px;
+    padding: 12px;
+    font-size: 0.65rem;
+    color: #ff9999;
+    margin-bottom: 16px;
+    line-height: 1.6;
+    display: none;
+  }
+  .setup-section {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+  .setup-title { font-family: 'Syne', sans-serif; font-size: 1rem; font-weight: 800; margin-bottom: 4px; color: var(--text); }
+  .setup-sub { font-size: 0.65rem; color: var(--muted); margin-bottom: 14px; letter-spacing: 1px; }
+  .setup-input {
+    width: 100%;
+    background: #0a0a0f;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    font-family: 'Space Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--text);
+    outline: none;
+    margin-bottom: 8px;
+    transition: border-color 0.2s;
+  }
+  .setup-input:focus { border-color: var(--accent); }
+  .btn-setup {
+    width: 100%;
+    padding: 12px;
+    background: var(--accent);
+    border: none;
+    border-radius: 8px;
+    font-family: 'Syne', sans-serif;
+    font-size: 0.85rem;
+    font-weight: 800;
+    color: #0a0a0f;
+    cursor: pointer;
+    letter-spacing: 1px;
+    margin-top: 4px;
+  }
+  .instructions {
+    font-size: 0.62rem;
+    color: var(--muted);
+    line-height: 1.8;
+    margin-top: 10px;
+  }
+  .instructions a { color: var(--accent); text-decoration: none; }
+  .step { margin-bottom: 4px; }
+  .step b { color: var(--text); }
+</style>
+</head>
+<body>
+<div class="content">
+  <header>
+    <div class="logo">GPS TRACKER</div>
+    <div class="subtitle">Telefon în mașină</div>
+  </header>
+
+  <!-- SETUP SECTION -->
+  <div class="setup-section" id="setupSection">
+    <div class="setup-title">⚙️ Configurare Firebase</div>
+    <div class="setup-sub">O SINGURA DATĂ — introdu datele Firebase gratuite</div>
+    <div class="instructions">
+      <div class="step"><b>1.</b> Du-te la <a href="https://console.firebase.google.com" target="_blank">console.firebase.google.com</a></div>
+      <div class="step"><b>2.</b> Creează proiect nou → Realtime Database → Start in test mode</div>
+      <div class="step"><b>3.</b> Copiază URL-ul bazei de date (ex: https://proiect-xxxx.firebaseio.com)</div>
+    </div>
+    <input class="setup-input" id="firebaseUrl" placeholder="https://proiect-xxxx-default-rtdb.firebaseio.com" type="url">
+    <button class="btn-setup" onclick="saveConfig()">💾 SALVEAZĂ ȘI CONTINUĂ</button>
+  </div>
+
+  <!-- MAIN SECTION (hidden until configured) -->
+  <div id="mainSection" style="display:none">
+    <div class="status-ring">
+      <div class="ring ring-outer" id="ringOuter"></div>
+      <div class="ring ring-mid"></div>
+      <div class="ring ring-inner"></div>
+      <div class="ring-pulse" id="ringPulse"></div>
+      <div class="car-icon">🚗</div>
+    </div>
+
+    <div class="status-indicator">
+      <span class="status-dot" id="statusDot"></span>
+      <span class="status-text" id="statusText">OPRIT</span>
+    </div>
+
+    <div class="data-grid">
+      <div class="data-card">
+        <div class="data-label">Viteză</div>
+        <div class="data-value" id="speed">—</div>
+        <div class="data-unit">km/h</div>
+      </div>
+      <div class="data-card">
+        <div class="data-label">Precizie</div>
+        <div class="data-value" id="accuracy">—</div>
+        <div class="data-unit">metri</div>
+      </div>
+      <div class="data-card wide">
+        <div class="data-label">Coordonate GPS</div>
+        <div class="coord-value" id="coords">Nu s-a obținut locația încă...</div>
+      </div>
+    </div>
+
+    <button class="btn-start" id="btnStart" onclick="startTracking()">🚀 PORNEȘTE TRACKING</button>
+    <button class="btn-stop" id="btnStop" onclick="stopTracking()">⏹ OPREȘTE</button>
+
+    <div class="link-section" id="linkSection">
+      <div class="link-label">🔗 Trimite linkul de urmărire</div>
+      <div class="link-box" id="trackLink">—</div>
+      <button class="btn-copy" onclick="copyLink()">📋 Copiază</button>
+      <button class="btn-share" onclick="shareWhatsApp()">📱 WhatsApp</button>
+    </div>
+
+    <div class="countdown" id="countdown" style="display:none">
+      Următor update în <span id="countSec">30</span>s
+    </div>
+
+    <div class="log" id="logDiv"></div>
+  </div>
+</div>
+
+<script>
+  // ---- Config ----
+  let FIREBASE_URL = '';
+  let SESSION_ID = '';
+  let watchId = null;
+  let sendInterval = null;
+  let countdownInterval = null;
+  let lastPosition = null;
+  let countSec = 30;
+  let isTracking = false;
+
+  function saveConfig() {
+    const url = document.getElementById('firebaseUrl').value.trim().replace(/\/$/, '');
+    if (!url.includes('firebaseio.com') && !url.includes('firebasedatabase.app')) {
+      alert('❌ URL invalid! Trebuie să fie un URL Firebase Realtime Database.');
+      return;
+    }
+    FIREBASE_URL = url;
+    localStorage.setItem('fbUrl', url);
+    document.getElementById('setupSection').style.display = 'none';
+    document.getElementById('mainSection').style.display = 'block';
+    addLog('✅ Firebase configurat: ' + url, 'ok');
+    document.getElementById('logDiv').style.display = 'block';
+  }
+
+  function generateId() {
+    return Math.random().toString(36).substr(2, 9).toUpperCase();
+  }
+
+  function addLog(msg, type = '') {
+    const log = document.getElementById('logDiv');
+    const entry = document.createElement('div');
+    entry.className = 'log-entry ' + type;
+    entry.textContent = new Date().toLocaleTimeString('ro') + ' → ' + msg;
+    log.insertBefore(entry, log.firstChild);
+    if (log.children.length > 20) log.removeChild(log.lastChild);
+  }
+
+  function setStatus(text, type) {
+    document.getElementById('statusText').textContent = text;
+    const dot = document.getElementById('statusDot');
+    dot.className = 'status-dot ' + (type || '');
+  }
+
+  async function sendToFirebase(pos) {
+    const data = {
+      lat: pos.coords.latitude,
+      lng: pos.coords.longitude,
+      speed: pos.coords.speed ? Math.round(pos.coords.speed * 3.6) : 0,
+      accuracy: Math.round(pos.coords.accuracy),
+      heading: pos.coords.heading || 0,
+      timestamp: Date.now()
+    };
+
+    try {
+      const res = await fetch(`${FIREBASE_URL}/sessions/${SESSION_ID}/location.json`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      addLog(`📡 Trimis: ${data.lat.toFixed(5)}, ${data.lng.toFixed(5)} — ${data.speed} km/h`, 'ok');
+      triggerPulse();
+    } catch (e) {
+      addLog('❌ Eroare trimitere: ' + e.message, 'err');
+    }
+  }
+
+  function triggerPulse() {
+    const pulse = document.getElementById('ringPulse');
+    pulse.className = 'ring-pulse pulsing';
+    setTimeout(() => { pulse.className = 'ring-pulse'; }, 1500);
+  }
+
+  function updateUI(pos) {
+    lastPosition = pos;
+    document.getElementById('speed').textContent = pos.coords.speed ? Math.round(pos.coords.speed * 3.6) : 0;
+    document.getElementById('accuracy').textContent = Math.round(pos.coords.accuracy);
+    document.getElementById('coords').textContent =
+      `LAT: ${pos.coords.latitude.toFixed(6)}\nLNG: ${pos.coords.longitude.toFixed(6)}`;
+  }
+
+  function startTracking() {
+    if (!navigator.geolocation) {
+      alert('❌ GPS nu este suportat pe acest dispozitiv!');
+      return;
+    }
+    SESSION_ID = generateId();
+
+    const monitorUrl = location.href.replace('tracker.html', 'monitor.html') +
+      '?fb=' + encodeURIComponent(FIREBASE_URL) + '&id=' + SESSION_ID;
+
+    document.getElementById('trackLink').textContent = monitorUrl;
+    document.getElementById('linkSection').style.display = 'block';
+
+    document.getElementById('btnStart').style.display = 'none';
+    document.getElementById('btnStop').style.display = 'block';
+    document.getElementById('ringOuter').classList.add('spinning');
+    document.getElementById('countdown').style.display = 'block';
+    setStatus('ACTIV — SE TRIMITE GPS', 'active');
+    isTracking = true;
+
+    // Get location immediately then every 30s
+    navigator.geolocation.watchPosition(
+      pos => { updateUI(pos); },
+      err => { addLog('⚠️ GPS: ' + err.message, 'err'); setStatus('EROARE GPS', 'error'); },
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 }
+    );
+
+    // Send immediately
+    navigator.geolocation.getCurrentPosition(pos => {
+      updateUI(pos);
+      sendToFirebase(pos);
+    }, err => addLog('GPS err: ' + err.message, 'err'), { enableHighAccuracy: true });
+
+    // Send every 30 seconds
+    countSec = 30;
+    sendInterval = setInterval(() => {
+      if (lastPosition) sendToFirebase(lastPosition);
+    }, 30000);
+
+    countdownInterval = setInterval(() => {
+      countSec--;
+      document.getElementById('countSec').textContent = countSec;
+      if (countSec <= 0) countSec = 30;
+    }, 1000);
+
+    addLog('🚀 Sesiune pornită: ' + SESSION_ID, 'ok');
+  }
+
+  function stopTracking() {
+    if (watchId) navigator.geolocation.clearWatch(watchId);
+    clearInterval(sendInterval);
+    clearInterval(countdownInterval);
+    document.getElementById('btnStart').style.display = 'block';
+    document.getElementById('btnStop').style.display = 'none';
+    document.getElementById('ringOuter').classList.remove('spinning');
+    document.getElementById('countdown').style.display = 'none';
+    setStatus('OPRIT', '');
+    isTracking = false;
+    addLog('⏹ Tracking oprit', '');
+  }
+
+  function copyLink() {
+    const link = document.getElementById('trackLink').textContent;
+    navigator.clipboard.writeText(link).then(() => alert('✅ Link copiat!')).catch(() => {
+      prompt('Copiază manual:', link);
+    });
+  }
+
+  function shareWhatsApp() {
+    const link = document.getElementById('trackLink').textContent;
+    const msg = encodeURIComponent('📍 Urmărește-mă live pe hartă:\n' + link);
+    window.open('https://wa.me/?text=' + msg, '_blank');
+  }
+
+  // Init
+  window.onload = () => {
+    const saved = localStorage.getItem('fbUrl');
+    if (saved) {
+      FIREBASE_URL = saved;
+      document.getElementById('setupSection').style.display = 'none';
+      document.getElementById('mainSection').style.display = 'block';
+      document.getElementById('firebaseUrl').value = saved;
+      document.getElementById('logDiv').style.display = 'block';
+      addLog('✅ Config încărcat din memorie', 'ok');
+    }
+  };
+</script>
+</body>
+</html>

@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>GPS Monitor 🗺️</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  :root {
+    --bg: #080810;
+    --panel: #0e0e1a;
+    --card: #13131f;
+    --border: #1a1a2e;
+    --accent: #00e5ff;
+    --accent2: #ff4466;
+    --green: #00ff88;
+    --text: #e0e0f0;
+    --muted: #44445a;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; overflow: hidden; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    display: flex;
+    flex-direction: column;
+  }
+
+  #map {
+    flex: 1;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Override leaflet tiles for dark look */
+  .leaflet-tile { filter: brightness(0.7) saturate(0.5) hue-rotate(180deg) invert(1); }
+  .leaflet-container { background: var(--bg); }
+
+  /* Top HUD */
+  .hud-top {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 1000;
+    padding: 12px 16px;
+    background: linear-gradient(to bottom, rgba(8,8,16,0.97) 70%, transparent);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .hud-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 1.1rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, var(--accent), #8844ff);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    letter-spacing: -0.5px;
+  }
+  .hud-session {
+    font-size: 0.55rem;
+    letter-spacing: 2px;
+    color: var(--muted);
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 8px;
+  }
+  .live-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.6rem;
+    letter-spacing: 2px;
+    color: var(--green);
+  }
+  .live-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 8px var(--green);
+    animation: blink 1.2s ease-in-out infinite;
+  }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  /* Bottom Info Panel */
+  .info-panel {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    z-index: 1000;
+    padding: 0 12px 20px;
+    background: linear-gradient(to top, rgba(8,8,16,0.98) 60%, transparent);
+  }
+  .metrics {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .metric {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 8px;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+  .metric::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent)50, transparent);
+  }
+  .metric-label {
+    font-size: 0.5rem;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+  .metric-value {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--accent);
+    line-height: 1;
+  }
+  .metric-unit { font-size: 0.5rem; color: var(--muted); }
+
+  /* Speed ring */
+  .speed-ring-wrap {
+    position: fixed;
+    bottom: 120px;
+    right: 16px;
+    z-index: 1001;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .speed-ring {
+    width: 90px; height: 90px;
+    border-radius: 50%;
+    border: 3px solid var(--border);
+    background: var(--card);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 30px #00e5ff20, inset 0 0 20px #00e5ff10;
+    position: relative;
+    overflow: hidden;
+  }
+  .speed-ring::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 50%;
+    background: linear-gradient(to bottom, #00e5ff08, transparent);
+  }
+  .speed-big { font-size: 1.6rem; font-weight: 700; color: var(--accent); line-height: 1; }
+  .speed-label { font-size: 0.45rem; letter-spacing: 1px; color: var(--muted); text-transform: uppercase; }
+
+  /* Center button */
+  .btn-center {
+    position: fixed;
+    bottom: 130px;
+    left: 16px;
+    z-index: 1001;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px;
+    color: var(--accent);
+    font-size: 1.2rem;
+    cursor: pointer;
+    box-shadow: 0 0 20px #00e5ff15;
+  }
+  .btn-center:active { transform: scale(0.95); }
+
+  /* Last update bar */
+  .last-update {
+    text-align: center;
+    font-size: 0.6rem;
+    color: var(--muted);
+    letter-spacing: 1px;
+    padding: 6px 0 2px;
+  }
+  .last-update span { color: var(--accent); }
+
+  /* Waiting screen */
+  #waitScreen {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+    text-align: center;
+  }
+  .wait-icon { font-size: 4rem; margin-bottom: 20px; animation: float 2s ease-in-out infinite; }
+  @keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-10px)} }
+  .wait-title { font-family: 'Syne', sans-serif; font-size: 1.5rem; font-weight: 800; margin-bottom: 8px;
+    background: linear-gradient(135deg, var(--accent), #8844ff);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  }
+  .wait-sub { color: var(--muted); font-size: 0.7rem; letter-spacing: 1px; line-height: 2; }
+  .spinner {
+    width: 40px; height: 40px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 20px auto;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* No link screen */
+  #noLinkScreen {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+    text-align: center;
+  }
+  .error-icon { font-size: 3rem; margin-bottom: 16px; }
+  .error-title { font-family: 'Syne', sans-serif; font-size: 1.2rem; font-weight: 800; color: var(--accent2); margin-bottom: 8px; }
+  .error-sub { color: var(--muted); font-size: 0.65rem; line-height: 2; }
+
+  /* Custom marker */
+  .car-marker {
+    background: var(--accent);
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.4rem;
+    border: 3px solid white;
+    box-shadow: 0 0 20px var(--accent), 0 4px 12px rgba(0,0,0,0.4);
+    animation: markerPulse 2s ease-in-out infinite;
+  }
+  @keyframes markerPulse { 0%,100%{box-shadow: 0 0 20px var(--accent), 0 4px 12px rgba(0,0,0,0.4)} 50%{box-shadow: 0 0 35px var(--accent), 0 4px 20px rgba(0,0,0,0.5)} }
+</style>
+</head>
+<body>
+
+<div id="noLinkScreen" style="display:none">
+  <div class="error-icon">🔗</div>
+  <div class="error-title">Link Invalid</div>
+  <div class="error-sub">
+    Deschide acest link direct<br>de pe telefonul din mașină<br>
+    sau cere un link nou de urmărire.
+  </div>
+</div>
+
+<div id="waitScreen">
+  <div class="wait-icon">🗺️</div>
+  <div class="wait-title">GPS MONITOR</div>
+  <div class="spinner"></div>
+  <div class="wait-sub" id="waitMsg">Se conectează la sesiunea GPS...<br>Așteptând prima locație...</div>
+</div>
+
+<div class="hud-top">
+  <div class="hud-title">GPS MONITOR</div>
+  <div class="hud-session" id="sessionLabel">—</div>
+  <div class="live-badge"><div class="live-dot"></div>LIVE</div>
+</div>
+
+<div id="map"></div>
+
+<div class="speed-ring-wrap">
+  <div class="speed-ring">
+    <div class="speed-big" id="speedBig">0</div>
+    <div class="speed-label">km/h</div>
+  </div>
+</div>
+
+<button class="btn-center" onclick="centerMap()" title="Centrează harta">🎯</button>
+
+<div class="info-panel">
+  <div class="last-update">Ultima actualizare: <span id="lastUpdate">—</span></div>
+  <div class="metrics">
+    <div class="metric">
+      <div class="metric-label">Lat</div>
+      <div class="metric-value" id="metLat" style="font-size:0.65rem">—</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Lng</div>
+      <div class="metric-value" id="metLng" style="font-size:0.65rem">—</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Precizie</div>
+      <div class="metric-value" id="metAcc">—</div>
+      <div class="metric-unit">m</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">Update</div>
+      <div class="metric-value" id="metAge" style="font-size:0.75rem; color: var(--green)">—</div>
+      <div class="metric-unit">sec</div>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+  const params = new URLSearchParams(location.search);
+  const FIREBASE_URL = params.get('fb');
+  const SESSION_ID = params.get('id');
+
+  let map, marker, accuracyCircle;
+  let lastLat = null, lastLng = null;
+  let mapInitialized = false;
+  let pollInterval = null;
+  let ageInterval = null;
+  let lastTimestamp = null;
+  let autoCenter = true;
+
+  // Check params
+  if (!FIREBASE_URL || !SESSION_ID) {
+    document.getElementById('waitScreen').style.display = 'none';
+    document.getElementById('noLinkScreen').style.display = 'flex';
+  } else {
+    document.getElementById('sessionLabel').textContent = 'ID: ' + SESSION_ID;
+    initMap();
+    startPolling();
+  }
+
+  function initMap() {
+    map = L.map('map', { zoomControl: false, attributionControl: false }).setView([45.7, 25.0], 6);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '© OpenStreetMap'
+    }).addTo(map);
+
+    L.control.attribution({ position: 'bottomleft', prefix: false }).addTo(map);
+
+    map.on('dragstart', () => { autoCenter = false; });
+  }
+
+  async function fetchLocation() {
+    try {
+      const url = `${FIREBASE_URL}/sessions/${SESSION_ID}/location.json`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      if (data && data.lat && data.lng) {
+        updateDisplay(data);
+      } else {
+        document.getElementById('waitMsg').textContent = 'Așteptând prima locație GPS...\nAsigură-te că Trackerul este pornit.';
+      }
+    } catch (e) {
+      document.getElementById('waitMsg').textContent = 'Eroare conexiune Firebase.\nVerifică linkul și conexiunea.';
+      console.error(e);
+    }
+  }
+
+  function updateDisplay(data) {
+    const { lat, lng, speed, accuracy, timestamp } = data;
+
+    // Hide wait screen
+    document.getElementById('waitScreen').style.display = 'none';
+
+    lastLat = lat; lastLng = lng;
+    lastTimestamp = timestamp;
+
+    // Update marker
+    if (!marker) {
+      const icon = L.divIcon({
+        html: '<div class="car-marker">🚗</div>',
+        iconSize: [44, 44],
+        iconAnchor: [22, 22],
+        className: ''
+      });
+      marker = L.marker([lat, lng], { icon }).addTo(map);
+    } else {
+      marker.setLatLng([lat, lng]);
+    }
+
+    // Accuracy circle
+    if (!accuracyCircle) {
+      accuracyCircle = L.circle([lat, lng], {
+        radius: accuracy,
+        color: '#00e5ff',
+        fillColor: '#00e5ff',
+        fillOpacity: 0.05,
+        weight: 1
+      }).addTo(map);
+    } else {
+      accuracyCircle.setLatLng([lat, lng]).setRadius(accuracy);
+    }
+
+    if (autoCenter || !mapInitialized) {
+      map.setView([lat, lng], mapInitialized ? map.getZoom() : 15, { animate: true });
+      mapInitialized = true;
+    }
+
+    // Update HUD
+    document.getElementById('speedBig').textContent = speed || 0;
+    document.getElementById('metLat').textContent = lat.toFixed(5);
+    document.getElementById('metLng').textContent = lng.toFixed(5);
+    document.getElementById('metAcc').textContent = accuracy || '—';
+    document.getElementById('lastUpdate').textContent = new Date(timestamp).toLocaleTimeString('ro');
+
+    // Popup
+    marker.bindPopup(`
+      <b style="font-family:monospace">🚗 Locație live</b><br>
+      Viteză: <b>${speed || 0} km/h</b><br>
+      Precizie: ${accuracy}m<br>
+      ${new Date(timestamp).toLocaleTimeString('ro')}
+    `);
+  }
+
+  function updateAge() {
+    if (!lastTimestamp) return;
+    const age = Math.round((Date.now() - lastTimestamp) / 1000);
+    document.getElementById('metAge').textContent = age;
+    // Color code: green <40s, yellow <90s, red >90s
+    const el = document.getElementById('metAge');
+    el.style.color = age < 40 ? 'var(--green)' : age < 90 ? '#ffaa00' : 'var(--accent2)';
+  }
+
+  function startPolling() {
+    fetchLocation(); // immediate
+    pollInterval = setInterval(fetchLocation, 5000); // poll every 5s
+    ageInterval = setInterval(updateAge, 1000);
+  }
+
+  function centerMap() {
+    autoCenter = true;
+    if (lastLat) {
+      map.setView([lastLat, lastLng], 15, { animate: true });
+    }
+  }
+</script>
+</body>
+</html>
